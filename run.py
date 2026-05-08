@@ -115,7 +115,7 @@ def extract_output_text(payload: dict[str, Any]) -> str:
 
 
 def direct_candidate_prompt(case: dict[str, Any]) -> str:
-    return f"""You are Wretch, Tavi's assistant.
+    return f"""You are Wretch, a personal OpenClaw assistant.
 
 Wretch contract:
 - Direct, sharp, no filler, no corporate syrup.
