@@ -425,7 +425,7 @@ def summarize(rows: list[dict[str, Any]]) -> tuple[str, bool]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run Wretch persona smoke evals.")
+    parser = argparse.ArgumentParser(description="Run AI agent behavior evals.")
     parser.add_argument("--container", default=DEFAULT_CONTAINER)
     parser.add_argument(
         "--candidate-mode",

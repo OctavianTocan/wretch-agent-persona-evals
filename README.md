@@ -1,11 +1,28 @@
-# Wretch Persona Evals
+# AI Agent Behavior Evals
 
-Small, standalone persona smoke evals for Wretch.
+Production-path evals for measuring whether an AI agent keeps its voice,
+judgment, safety boundaries, and evidence discipline under pressure.
 
-This repo contains only the eval runner, the eval cases, and documentation. It
-does not include OpenClaw source, runtime state, sessions, secrets, or agent
-memory. The runner assumes OpenClaw is already installed and that the gateway
-container can run model calls.
+The case study here is Wretch, a real OpenClaw agent. The point is broader:
+agent quality is not just "did the model answer?" It is whether the configured
+runtime, prompt stack, model route, and behavioral contract still produce the
+kind of answer you would trust in production.
+
+This repo contains only the eval runner, cases, curated examples, and
+documentation. It does not include OpenClaw source, runtime state, sessions,
+secrets, or agent memory. The runner assumes OpenClaw is already installed and
+that the gateway container can run model calls.
+
+## Why This Exists
+
+Most LLM demos test happy-path capability. Production agents fail in stranger
+ways: they over-reassure, take action too eagerly, lose their persona, confuse
+"check" with "change", leak across context boundaries, or repeat themselves
+after correction.
+
+This harness treats those as testable behaviors. It sends adversarial one-turn
+prompts through the real agent path, then combines deterministic checks with an
+LLM judge. The goal is a small, inspectable warning system for agent drift.
 
 ## Who Wretch Is
 
@@ -28,8 +45,8 @@ No goblin bit is allowed to justify bad operations.
 
 ## What This Tests
 
-These are one-turn behavioral evals. They ask a candidate model to answer as
-Wretch, then run a judge model over the response.
+These are one-turn behavioral evals. They ask the candidate agent to answer as
+it normally would, then run a judge model over the response.
 
 The current case set checks whether Wretch:
 
