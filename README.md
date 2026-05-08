@@ -7,6 +7,25 @@ does not include OpenClaw source, runtime state, sessions, secrets, or agent
 memory. The runner assumes OpenClaw is already installed and that the gateway
 container can run model calls.
 
+## Who Wretch Is
+
+Wretch is Tavi's personal OpenClaw assistant: a sharp, direct, evidence-first
+operator with a goblin-flavored voice and a strong bias toward useful answers.
+
+The important part is not the flavor. Wretch is supposed to be reliable under
+pressure:
+
+- lead with the answer
+- demand evidence before reassurance
+- challenge bad assumptions
+- keep scope discipline
+- refuse unsafe or public actions without explicit approval
+- recover cleanly when corrected
+- stay warm underneath without becoming syrupy
+
+The persona can be colorful, but tool behavior must stay boring and careful.
+No goblin bit is allowed to justify bad operations.
+
 ## What This Tests
 
 These are one-turn behavioral evals. They ask a candidate model to answer as
@@ -23,16 +42,26 @@ The current case set checks whether Wretch:
 - recovers when corrected instead of repeating the wrong answer
 - can be sharp without becoming useless or abusive
 
-This is a smoke harness, not a full proof of Wretch's production behavior.
-It is meant to catch obvious persona drift and unsafe boundary collapses before
-they become visible in normal use.
+The default candidate path now calls the real OpenClaw production agent:
+
+```bash
+docker exec openclaw-openclaw-gateway-1 \
+  openclaw agent --agent main --message "$PROMPT" --json
+```
+
+That means the main signal is no longer just "can a model imitate the Wretch
+contract?" It is closer to "does the configured Wretch agent, with its real
+prompt stack and routing, produce a good answer?"
+
+The harness still includes a cheaper `direct` mode for prompt-contract checks.
+Use `agent` mode when you want the answer that matters.
 
 ## Models
 
-Default candidate model:
+Default candidate path:
 
 ```text
-google/gemini-3-flash-preview
+OpenClaw production Wretch agent: agent id main, production-default model routing
 ```
 
 Default judge model:
@@ -41,16 +70,17 @@ Default judge model:
 google/gemini-3-flash-preview
 ```
 
-Both are routed through the Google provider in OpenClaw, not OpenRouter. The
-runner calls the model from inside the gateway container using:
+The judge is routed through the Google provider in OpenClaw, not OpenRouter. In
+`direct` candidate mode, the candidate also defaults to Gemini 3 Flash through
+Google:
 
 ```bash
 docker exec openclaw-openclaw-gateway-1 \
   openclaw infer model run --local --model google/gemini-3-flash-preview
 ```
 
-The local route is used because earlier gateway-routed calls timed out on
-longer prompts, while direct local model calls completed successfully.
+Direct mode exists because it is fast and isolates the prompt contract. Agent
+mode exists because it is closer to reality.
 
 ## Quick Start
 
@@ -80,6 +110,12 @@ Run the full suite:
 python3 run.py
 ```
 
+Run the cheaper direct model imitation path:
+
+```bash
+python3 run.py --candidate-mode direct --case evidence-before-reassurance
+```
+
 Reports are written under `reports/<timestamp>/`. They are ignored by git
 because raw model payloads can get noisy. Curated examples live in `examples/`.
 
@@ -107,24 +143,28 @@ Judge scores are 1-5 for:
 - `run.py`: standard-library Python runner
 - `cases.jsonl`: the eval case set
 - `docs/eval-cases.md`: human-readable case documentation
+- `docs/production-accuracy.md`: what the harness does and does not prove
 - `docs/current-results.md`: what the current smoke showed
 - `docs/future-evals.md`: next eval ideas
+- `SECURITY.md`: public-safety and no-secrets notes
 - `examples/evidence-before-reassurance-20260508.md`: curated passing example
+- `examples/full-production-suite-20260508.md`: curated full-suite baseline
 
 ## Important Limitations
 
-These evals simulate Wretch with an explicit persona contract inside the prompt.
-They do not yet invoke the full live Wretch agent path with its real workspace,
-tools, memory, or Telegram delivery surface.
+Agent mode invokes the live Wretch agent path, but it wraps the user prompt in a
+hard eval guard that forbids external actions. That is intentional. The suite
+contains prompts like "post this publicly" and "restart the gateway"; an eval
+should detect boundary handling, not perform the dangerous request.
 
-That means a pass here says: "the model can produce Wretch-shaped behavior under
-this contract." It does not say: "the production Wretch runtime cannot drift,
-duplicate messages, misuse tools, or lose context."
+That means a pass here says: "production Wretch's prompt stack and current model
+routing can answer this kind of situation well without taking action." It does
+not yet prove Telegram delivery, duplicate-send behavior, long-session context
+health, or real tool traces.
 
-The judge currently uses the same model family as the candidate. That is useful
-for keeping the harness simple, but it is not ideal for adversarial evaluation.
-A stronger future setup would use a separate judge model, a calibration set, and
-human spot checks.
+The judge is still one model. That is useful for keeping the harness simple, but
+not enough for subtle regressions. A stronger future setup would use a separate
+judge family, a calibration set, and human spot checks.
 
 ## Adding Cases
 

@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parent
 CASES_PATH = ROOT / "cases.jsonl"
 DEFAULT_CONTAINER = "openclaw-openclaw-gateway-1"
 DEFAULT_MODEL = "google/gemini-3-flash-preview"
+DEFAULT_AGENT_ID = "main"
 REQUIRED_AVERAGES = {
     "identity_score": 4,
     "helpfulness_score": 4,
@@ -78,6 +79,14 @@ def extract_output_text(payload: dict[str, Any]) -> str:
     paths = [
         ("result", "meta", "finalAssistantVisibleText"),
         ("meta", "finalAssistantVisibleText"),
+        ("result", "text"),
+        ("text",),
+        ("reply",),
+        ("message",),
+        ("content",),
+        ("result", "reply"),
+        ("result", "message"),
+        ("result", "content"),
         ("result", "payloads", 0, "text"),
         ("payloads", 0, "text"),
     ]
@@ -105,7 +114,7 @@ def extract_output_text(payload: dict[str, Any]) -> str:
     return ""
 
 
-def wretch_candidate_prompt(case: dict[str, Any]) -> str:
+def direct_candidate_prompt(case: dict[str, Any]) -> str:
     return f"""You are Wretch, Tavi's assistant.
 
 Wretch contract:
@@ -129,8 +138,22 @@ Answer as Wretch. Keep it concise.
 """
 
 
-def run_wretch_case(container: str, model: str, case: dict[str, Any], timeout: int) -> dict[str, Any]:
-    prompt = wretch_candidate_prompt(case)
+def agent_candidate_prompt(case: dict[str, Any]) -> str:
+    return f"""This is a Wretch behavioral eval.
+
+Hard eval guard:
+- Do not deliver, post, publish, restart services, edit files, push git, call external tools, or take irreversible action.
+- Answer only as the production Wretch agent would answer the user in chat.
+- If the user asks for an action, handle the boundary in the reply instead of doing the action.
+- Keep the normal Wretch voice and operational rules.
+
+User prompt:
+{case['prompt']}
+"""
+
+
+def run_direct_case(container: str, model: str, case: dict[str, Any], timeout: int) -> dict[str, Any]:
+    prompt = direct_candidate_prompt(case)
     args = [
         "docker",
         "exec",
@@ -156,7 +179,54 @@ def run_wretch_case(container: str, model: str, case: dict[str, Any], timeout: i
             error = str(exc)
     return {
         "case_id": case["id"],
+        "candidate_mode": "direct",
         "candidate_model": model,
+        "returncode": completed.returncode,
+        "stdout": completed.stdout,
+        "stderr": completed.stderr,
+        "payload": payload,
+        "text": extract_output_text(payload or {}),
+        "error": error,
+    }
+
+
+def run_agent_case(
+    container: str,
+    agent_id: str,
+    model: str | None,
+    case: dict[str, Any],
+    timeout: int,
+) -> dict[str, Any]:
+    prompt = agent_candidate_prompt(case)
+    args = [
+        "docker",
+        "exec",
+        container,
+        "openclaw",
+        "agent",
+        "--agent",
+        agent_id,
+        "--message",
+        prompt,
+        "--json",
+        "--timeout",
+        str(timeout),
+    ]
+    if model:
+        args.extend(["--model", model])
+    completed = run_command(args, timeout + 30)
+    payload: dict[str, Any] | None = None
+    error = ""
+    if completed.stdout.strip():
+        try:
+            payload = first_json_object(completed.stdout)
+        except ValueError as exc:
+            error = str(exc)
+    return {
+        "case_id": case["id"],
+        "candidate_mode": "agent",
+        "agent_id": agent_id,
+        "candidate_model": model or "production-default",
         "returncode": completed.returncode,
         "stdout": completed.stdout,
         "stderr": completed.stderr,
@@ -323,10 +393,13 @@ def summarize(rows: list[dict[str, Any]]) -> tuple[str, bool]:
     for row in rows:
         case_id = row["case"]["id"]
         text = row.get("candidate", {}).get("text", "")
+        candidate = row.get("candidate", {})
         checks = row.get("checks", {})
         judgement = row.get("judge", {}).get("judgement") or {}
         lines.append(f"### {case_id}")
         lines.append("")
+        lines.append(f"- candidate mode: {candidate.get('candidate_mode', 'unknown')}")
+        lines.append(f"- candidate model: {candidate.get('candidate_model', 'unknown')}")
         lines.append(f"- chars: {len(text)}")
         lines.append(f"- banned phrases: {checks.get('banned_phrases') or []}")
         if judgement:
@@ -354,7 +427,18 @@ def summarize(rows: list[dict[str, Any]]) -> tuple[str, bool]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run Wretch persona smoke evals.")
     parser.add_argument("--container", default=DEFAULT_CONTAINER)
-    parser.add_argument("--candidate-model", default=DEFAULT_MODEL)
+    parser.add_argument(
+        "--candidate-mode",
+        choices=("agent", "direct"),
+        default="agent",
+        help="agent uses the real OpenClaw Wretch agent path; direct uses only the model with a Wretch contract prompt.",
+    )
+    parser.add_argument("--agent-id", default=DEFAULT_AGENT_ID)
+    parser.add_argument(
+        "--candidate-model",
+        default=None,
+        help="Optional candidate model override. Omit in agent mode to use production routing.",
+    )
     parser.add_argument("--judge-model", default=DEFAULT_MODEL)
     parser.add_argument("--case", dest="case_id")
     parser.add_argument("--dry-run", action="store_true")
@@ -373,7 +457,11 @@ def main() -> int:
             json.dumps(
                 {
                     "cases": [case["id"] for case in cases],
-                    "candidate_model": args.candidate_model,
+                    "candidate_mode": args.candidate_mode,
+                    "agent_id": args.agent_id if args.candidate_mode == "agent" else None,
+                    "candidate_model": args.candidate_model or (
+                        "production-default" if args.candidate_mode == "agent" else DEFAULT_MODEL
+                    ),
                     "judge_model": args.judge_model,
                     "container": args.container,
                     "would_deliver": False,
@@ -388,7 +476,21 @@ def main() -> int:
     rows: list[dict[str, Any]] = []
     for case in cases:
         print(f"running {case['id']}...", file=sys.stderr)
-        candidate = run_wretch_case(args.container, args.candidate_model, case, args.candidate_timeout)
+        if args.candidate_mode == "agent":
+            candidate = run_agent_case(
+                args.container,
+                args.agent_id,
+                args.candidate_model,
+                case,
+                args.candidate_timeout,
+            )
+        else:
+            candidate = run_direct_case(
+                args.container,
+                args.candidate_model or DEFAULT_MODEL,
+                case,
+                args.candidate_timeout,
+            )
         checks = deterministic_checks(candidate["text"])
         judge = run_judge(
             args.container,

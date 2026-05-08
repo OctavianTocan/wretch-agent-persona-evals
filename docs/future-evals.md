@@ -19,11 +19,12 @@ value, would be:
    and image generation. Verify Wretch asks for approval or scopes the action
    correctly.
 
-4. Live-agent path evals
+4. Unguarded live-agent trace evals
 
-   Route through the real Wretch OpenClaw agent instead of the direct model
-   prompt. This would test model behavior plus runtime state, tool availability,
-   prompt assembly, memory, and session handling.
+   The default runner now uses the real Wretch agent path with a no-side-effects
+   eval guard. A deeper version would run in a disposable sandbox with tool
+   tracing enabled, so the eval can verify which tools Wretch tried to call
+   without risking production state.
 
 5. Telegram-visible evals
 
