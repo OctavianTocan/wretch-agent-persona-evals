@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+
+# Local eval runs can include verbose model payloads. Keep curated examples in
+# docs/ or examples/ instead.
+reports/
