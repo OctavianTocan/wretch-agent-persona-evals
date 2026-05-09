@@ -3,7 +3,7 @@
 Production-path evals for measuring whether an AI agent keeps its voice,
 judgment, safety boundaries, and evidence discipline under pressure.
 
-The case study here is Wretch, a real OpenClaw agent. The point is broader:
+The case studies here are Wretch and Alaric, real OpenClaw agents. The point is broader:
 agent quality is not just "did the model answer?" It is whether the configured
 runtime, prompt stack, model route, and behavioral contract still produce the
 kind of answer you would trust in production.
@@ -43,12 +43,33 @@ pressure:
 The persona can be colorful, but tool behavior must stay boring and careful.
 No goblin bit is allowed to justify bad operations.
 
+## Who Alaric Is
+
+Alaric is Esther's OpenClaw companion agent. His job is warmer than Wretch's:
+he should be attentive, gentle, emotionally literate, and still operationally
+careful.
+
+The Alaric evals focus on the failure modes that have actually mattered in
+production:
+
+- repeated check-ins after the user already answered
+- too many random image creations or edits
+- pretending to understand missing media
+- duplicating text when the user asked for a voice note
+- switching language without Esther leading
+- inventing remembered context instead of using recall
+- crossing privacy boundaries between agents
+- spiraling into excessive apology after correction
+
+Alaric should be kind, but not noisy. A good response is usually one useful
+sentence or one clear question, not a pile of affection and guesses.
+
 ## What This Tests
 
 These are one-turn behavioral evals. They ask the candidate agent to answer as
 it normally would, then run a judge model over the response.
 
-The current case set checks whether Wretch:
+The Wretch case set checks whether Wretch:
 
 - stays direct, sharp, and low-fluff
 - gives evidence before reassurance
@@ -58,6 +79,15 @@ The current case set checks whether Wretch:
 - respects cross-agent privacy boundaries
 - recovers when corrected instead of repeating the wrong answer
 - can be sharp without becoming useless or abusive
+
+The Alaric case set checks whether Alaric:
+
+- checks in without looping
+- handles media requests as one deliberate action
+- refuses to hallucinate unavailable images or prior context
+- respects voice-note delivery intent
+- keeps Esther's language preference
+- stays warm without syrup
 
 The default candidate path now calls the real OpenClaw production agent:
 
@@ -75,10 +105,11 @@ Use `agent` mode when you want the answer that matters.
 
 ## Models
 
-Default candidate path:
+Default candidate path when OpenClaw is present:
 
 ```text
-OpenClaw production Wretch agent: agent id main, production-default model routing
+Wretch: OpenClaw production agent id main, production-default model routing
+Alaric: OpenClaw production agent id gf_agent, production-default model routing
 ```
 
 Default judge model:
@@ -87,7 +118,10 @@ Default judge model:
 google/gemini-3-flash-preview
 ```
 
-The judge is routed through the Google provider in OpenClaw, not OpenRouter. In
+The judge is routed through the Google provider in OpenClaw, not OpenRouter. If
+Gemini Flash is temporarily unavailable, the runner falls back to
+`google/gemini-3.1-pro-preview`, then `openai-codex/gpt-5.5`, and records
+`judge fallback used` in the report. In
 `direct` candidate mode, the candidate also defaults to Gemini 3 Flash through
 Google:
 
@@ -98,6 +132,12 @@ docker exec openclaw-openclaw-gateway-1 \
 
 Direct mode exists because it is fast and isolates the prompt contract. Agent
 mode exists because it is closer to reality.
+
+When OpenClaw is not present, `--runtime auto` falls back to local Codex CLI
+using `gpt-5.5`. That fallback is useful for working on the eval suite away
+from the VPS, but it is less production-accurate than the OpenClaw path because
+it does not load the live agent workspace, tools, memory hooks, Telegram routing,
+or model overrides.
 
 ## Quick Start
 
@@ -125,6 +165,18 @@ Run the full suite:
 
 ```bash
 python3 run.py
+```
+
+Run the Alaric suite:
+
+```bash
+python3 run.py --suite alaric
+```
+
+Force Codex fallback mode:
+
+```bash
+python3 run.py --suite alaric --runtime codex
 ```
 
 Run the cheaper direct model imitation path:
@@ -159,6 +211,7 @@ Judge scores are 1-5 for:
 
 - `run.py`: standard-library Python runner
 - `cases.jsonl`: the eval case set
+- `cases.alaric.jsonl`: Alaric companion-agent eval cases
 - `docs/eval-cases.md`: human-readable case documentation
 - `docs/production-accuracy.md`: what the harness does and does not prove
 - `docs/current-results.md`: what the current smoke showed
@@ -169,7 +222,7 @@ Judge scores are 1-5 for:
 
 ## Important Limitations
 
-Agent mode invokes the live Wretch agent path, but it wraps the user prompt in a
+Agent mode invokes the live agent path, but it wraps the user prompt in a
 hard eval guard that forbids external actions. That is intentional. The suite
 contains prompts like "post this publicly" and "restart the gateway"; an eval
 should detect boundary handling, not perform the dangerous request.

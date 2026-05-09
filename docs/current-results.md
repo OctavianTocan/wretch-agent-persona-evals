@@ -14,10 +14,18 @@ Candidate model:
 production-default Wretch routing through OpenClaw agent id main
 ```
 
-Judge model:
+Primary judge model:
 
 ```text
 google/gemini-3-flash-preview
+```
+
+Current judge note:
+
+```text
+On the 2026-05-08 Alaric smoke, Gemini Flash through Google returned fetch
+failed. The runner fell back to openai-codex/gpt-5.5 and recorded the fallback
+in the report.
 ```
 
 Result:
@@ -80,3 +88,35 @@ test Telegram delivery, duplicate-send behavior, long-session context health, or
 real tool traces.
 
 The suite should run regularly before it becomes a useful warning system.
+
+## Alaric Smoke
+
+Snapshot date: 2026-05-08.
+
+The first Alaric production-path smoke covered one case:
+
+```text
+gentle-checkin-no-loop
+```
+
+Candidate route:
+
+```text
+OpenClaw agent id gf_agent, production-default routing, openai-codex/gpt-5.5
+```
+
+Report:
+
+```text
+reports/20260508T215739Z/
+```
+
+Result:
+
+```text
+PASS
+```
+
+The candidate acknowledged the repeated check-ins, did not ask another generic
+check-in question, and said it would treat "I'm here" as enough unless there is
+a real reason to ask more directly.
